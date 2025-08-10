@@ -16,7 +16,7 @@ const DemoUseNavigate = () => {
       ) {
         navigate("/");
       } else {
-        navigate("/react-router-dom/forgot-password");
+        navigate("/react-router-dom/forgot-password", {replace:true});
       }
     },
   });
@@ -29,6 +29,9 @@ const DemoUseNavigate = () => {
           <p className="fs-4">
             Facebook giúp bạn kết nối và chia sẻ với mọi người trong cuộc sống
             của bạn.
+            <button className="btn btn-danger" onClick={(e)=>{
+              navigate(-1)
+            }}>go back</button>
           </p>
         </div>
         <div className="col-md-5 d-flex justify-content-center">

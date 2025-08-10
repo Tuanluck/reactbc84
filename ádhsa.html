@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>2D Platformer Demo - Peter's Build</title>
+<style>
+  :root{
+    --ui-bg: rgba(10,10,20,0.6);
+    --accent: #ffd166;
+    --text: #fff;
+    --glass: rgba(255,255,255,0.06);
+  }
+  html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  body{background:#081229;color:var(--text);display:flex;flex-direction:column;align-items:center;gap:10px}
+  #gameContainer{position:relative;width:100%;max-width:1024px;height:640px;background:#6ec1ff;overflow:hidden;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.6)}
+  canvas{display:block;width:100%;height:100%}
+  /* UI overlays */
+  .ui {position:absolute;left:12px;top:12px;z-index:30;background:var(--ui-bg);backdrop-filter: blur(6px);padding:8px;border-radius:8px}
+  .ui.right{left:auto;right:12px}
+  .hudRow{display:flex;gap:8px;align-items:center}
+  .heart{color:#ff6b6b;font-weight:700;padding:2px 6px;border-radius:6px;background:rgba(255,255,255,0.06)}
+  .btn{background:var(--glass);border:1px solid rgba(255,255,255,0.06);padding:6px 8px;border-radius:6px;color:var(--text);cursor:pointer}
+  .menu{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:40}
+  .menu .card{width:90%;max-width:520px;padding:18px;border-radius:12px;background:linear-gradient(180deg,rgba(0,0,0,0.6),rgba(0,0,0,0.4));box-shadow:0 8px 30px rgba(0,0,0,0.7);text-align:center}
+  .menu h1{margin:0 0 8px 0;font-size:28px}
+  .menu p{margin:0 0 12px 0;color:rgba(255,255,255,0.8)}
+  .menu .row{display:flex;flex-direction:column;gap:8px}
+  .controlsTouch{position:absolute;bottom:18px;left:18px;z-index:45;display:flex;gap:8px}
+  .touchBtn{width:64px;height:64px;border-radius:12px;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;color:white;font-weight:700}
+  .touchBtn.small{width:46px;height:46px}
+  .mini{font-size:12px;color:rgba(255,255,255,0.8)}
+  /* responsive */
+  @media(max-width:600px){
+    #gameContainer{height:56vh}
+    .ui{top:8px;left:8px;padding:6px}
+  }
+</style>
+</head>
+<body>
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="1024" height="640"></canvas>
+
+    <!-- HUD top-left -->
+    <div class="ui" id="hud">
+      <div class="hudRow">
+        <div id="hearts" class="heart">❤❤❤</div>
+        <div class="mini">Score: <span id="score">0</span></div>
+        <div class="mini">Time: <span id="timer">0</span>s</div>
+      </div>
+    </div>
+
+    <!-- HUD top-right -->
+    <div class="ui right" id="hudRight">
+      <div class="hudRow">
+        <div class="mini">Level: <span id="levelNum">1</span></div>
+        <button class="btn" id="pauseBtn">Pause</button>
+        <button class="btn" id="openMenuBtn">Menu</button>
+      </div>
+    </div>
+
+    <!-- Touch controls -->
+    <div class="controlsTouch" id="touchControls" style="display:none">
+      <div class="touchBtn" id="touchLeft">◀</div>
+      <div class="touchBtn" id="touchRight">▶</div>
+      <div style="width:12px"></div>
+      <div class="touchBtn" id="touchJump">▲</div>
+      <div class="touchBtn small" id="touchAttack">⚔</div>
+    </div>
+
+    <!-- Menu overlay -->
+    <div class="menu" id="mainMenu">
+      <div class="card">
+        <h1>Mini 2D Game Demo</h1>
+        <p>Peter's quick playable demo — open file in browser to play.</p>
+        <div class="row">
+          <button class="btn" id="playBtn">Play</button>
+          <button class="btn" id="shopBtn">Shop</button>
+          <button class="btn" id="leaderBtn">Leaderboard</button>
+          <button class="btn" id="settingsBtn">Settings</button>
+          <button class="btn" id="exportScoresBtn">Export Scores</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-menus (hidden) -->
+    <div class="menu" id="subMenu" style="display:none"></div>
+  </div>
+
+<script type="module">
+/*
+  Mini 2D Platformer Demo
+  - Single-file HTML/CSS/JS
+  - Features implemented:
+    * Player: move, jump, attack (shoot)
+    * Enemies: patrol & chase when near
+    * Coins: collectible increases score/coins
+    * Multiple levels (data-driven)
+    * HUD (hearts, score, timer)
+    * Menus: main, pause, shop, leaderboard, settings
+    * Shop buys upgrades using coins (speed, maxHealth)
+    * Leaderboard stored in localStorage (top 10)
+    * Settings: sound toggle, graphics quality, key remapping
+    * Touch controls for mobile
+    * Parallax background and day/night cycle
+    * Modular ES6 style with comments
+*/
+
+/* -------------------------
+   Utilities & State
+   ------------------------- */
+const $ = sel => document.querySelector(sel);
+const isTouch = 'ontouchstart' in window;
+const STORAGE_SCORES = 'mini2d_scores_v1';
+const STORAGE_SAVE = 'mini2d_save_v1';
+const canvas = $('#gameCanvas');
+const ctx = canvas.getContext('2d');
+let W = canvas.width, H = canvas.height;
+
+// Global game state (simple)
+const Game = {
+  running: false,
+  paused: false,
+  levelIndex: 0,
+  timeSec: 0,
+  score: 0,
+  coins: 0,
+  keys: { left:'ArrowLeft', right:'ArrowRight', jump:'Space', attack:'KeyZ' }, // default mapping
+  settings: { sound:true, graphics:'high' }, // low/medium/high
+  save() { localStorage.setItem(STORAGE_SAVE, JSON.stringify({ score:this.score, coins:this.coins, settings:this.settings, keys:this.keys })); },
+  load() { const s = localStorage.getItem(STORAGE_SAVE); if(s) { const o=JSON.parse(s); this.score=o.score||0; this.coins=o.coins||0; this.settings=o.settings||this.settings; this.keys=o.keys||this.keys; } }
+};
+
+/* -------------------------
+   Level Data (simple)
+   ------------------------- */
+const LEVELS = [
+  {
+    name:"Green Fields",
+    gravity: 0.9,
+    platforms: [ {x:0,y:560,w:2048,h:80}, {x:400,y:460,w:160,h:16}, {x:700,y:380,w:160,h:16}, {x:1050,y:320,w:220,h:16} ],
+    enemies: [ {x:900,y:520,range:160},{x:1300,y:520,range:120} ],
+    coins: [ {x:420,y:420},{x:740,y:340},{x:1060,y:280},{x:1500,y:520} ],
+    goal: {x:1900,y:480,w:60,h:80},
+    timeLimit: 90
+  },
+  {
+    name:"Cave Run",
+    gravity: 1.1,
+    platforms: [ {x:0,y:560,w:2048,h:80}, {x:300,y:480,w:120,h:16}, {x:520,y:420,w:120,h:16}, {x:780,y:360,w:120,h:16} ],
+    enemies: [ {x:600,y:520,range:220},{x:1400,y:520,range:200} ],
+    coins: [ {x:320,y:440},{x:540,y:380},{x:800,y:320},{x:1600,y:520} ],
+    goal: {x:1900,y:480,w:60,h:80},
+    timeLimit: 80
+  }
+];
+
+/* -------------------------
+   Entities
+   ------------------------- */
+class Rect {
+  constructor(x,y,w,h){ Object.assign(this,{x,y,w,h}); }
+  intersects(b){ return !(this.x+this.w < b.x || this.x> b.x+b.w || this.y+this.h < b.y || this.y> b.y+b.h); }
+}
+class Player {
+  constructor(){
+    this.x = 100; this.y = 480; this.w = 40; this.h = 56;
+    this.vx = 0; this.vy = 0; this.speed = 4; this.jumpPower = -14;
+    this.grounded = false;
+    this.facing = 1;
+    this.health = 3;
+    this.maxHealth = 3;
+    this.attackCooldown = 0;
+    this.isAlive = true;
+  }
+  rect(){ return new Rect(this.x,this.y,this.w,this.h); }
+}
+class Enemy {
+  constructor(x,y,range=120){
+    this.x=x; this.y=y; this.w=42; this.h=48; this.vx=1.2; this.range=range; this.startX=x; this.health=1; this.isAlive=true;
+  }
+  rect(){ return new Rect(this.x,this.y,this.w,this.h); }
+}
+
+/* -------------------------
+   Game World / Camera
+   ------------------------- */
+let player = new Player();
+let enemies = [];
+let platforms = [];
+let coins = [];
+let goal = null;
+let cameraX = 0;
+let lastTime = 0;
+
+// helper to reset level state
+function loadLevel(index){
+  const lvl = LEVELS[index];
+  player = new Player();
+  player.maxHealth = 3;
+  player.health = Math.min(player.maxHealth, player.health || player.maxHealth);
+  enemies = lvl.enemies.map(e=> new Enemy(e.x,e.y,e.range));
+  platforms = lvl.platforms.map(p=> ({...p}) );
+  coins = lvl.coins.map(c=> ({...c, collected:false}) );
+  goal = {...lvl.goal};
+  cameraX = 0;
+  Game.levelIndex = index;
+  Game.timeSec = 0;
+  document.getElementById('levelNum').textContent = index+1;
+  Game.running = true;
+  Game.paused = false;
+}
+
+/* -------------------------
+   Input handling
+   ------------------------- */
+const Input = { keysDown: new Set(), touchState: {left:false,right:false,jump:false,attack:false} };
+window.addEventListener('keydown', e=> {
+  Input.keysDown.add(e.code);
+  // key remapping UI may change Game.keys mapping
+});
+window.addEventListener('keyup', e=> Input.keysDown.delete(e.code));
+
+// Touch UI show/hide
+function setupTouch(){
+  if(!isTouch) { $('#touchControls').style.display='none'; return; }
+  $('#touchControls').style.display='flex';
+  const map = { touchLeft: 'left', touchRight:'right', touchJump:'jump', touchAttack:'attack' };
+  Object.keys(map).forEach(id=>{
+    const el = $('#'+id);
+    el.addEventListener('touchstart', e=>{ e.preventDefault(); Input.touchState[map[id]]=true; });
+    el.addEventListener('touchend', e=>{ e.preventDefault(); Input.touchState[map[id]]=false; });
+    el.addEventListener('mousedown', e=>{ Input.touchState[map[id]] = true; });
+    el.addEventListener('mouseup', e=>{ Input.touchState[map[id]] = false; });
+  });
+}
+
+/* -------------------------
+   Game Loop & Physics
+   ------------------------- */
+function update(dt){
+  if(!Game.running || Game.paused) return;
+  const lvl = LEVELS[Game.levelIndex];
+
+  // Update timer
+  Game.timeSec += dt/1000;
+
+  // Input resolution: combine keyboard and touch
+  const leftDown = Input.keysDown.has(Game.keys.left) || Input.keysDown.has('KeyA') || Input.touchState.left;
+  const rightDown = Input.keysDown.has(Game.keys.right) || Input.keysDown.has('KeyD') || Input.touchState.right;
+  const jumpDown = Input.keysDown.has(Game.keys.jump) || Input.touchState.jump;
+  const attackDown = Input.keysDown.has(Game.keys.attack) || Input.touchState.attack;
+
+  // Movement
+  player.vx = 0;
+  if(leftDown) { player.vx = -player.speed; player.facing = -1; }
+  if(rightDown){ player.vx = player.speed; player.facing = 1; }
+
+  // Jump
+  if(jumpDown && player.grounded){ player.vy = player.jumpPower; player.grounded=false; playSound('jump'); }
+
+  // Apply gravity
+  player.vy += (lvl.gravity || 0.9);
+
+  // Apply velocities
+  player.x += player.vx;
+  player.y += player.vy;
+
+  // Platforms collision (simple AABB resolution)
+  player.grounded = false;
+  for(const p of platforms){
+    const platRect = new Rect(p.x,p.y,p.w,p.h);
+    const playerRect = player.rect();
+    if(playerRect.intersects(platRect)){
+      // simple resolution: if coming from top
+      if(player.vy > 0 && (player.y + player.h - player.vy) <= p.y + 2){
+        player.y = p.y - player.h;
+        player.vy = 0;
+        player.grounded = true;
+      } else {
+        // collide horizontally - push back
+        if(player.x < p.x) player.x = p.x - player.w - 1;
+        else player.x = p.x + p.w + 1;
+      }
+    }
+  }
+
+  // Boundaries
+  if(player.y > H + 200){ // fell
+    player.health = 0; player.isAlive=false;
+  }
+
+  // Attack: spawn projectile (simple)
+  if(attackDown && player.attackCooldown <= 0){
+    player.attackCooldown = 0.4; // sec
+    projectiles.push({x: player.x + (player.facing>0?player.w: -10), y: player.y+20, vx: player.facing*8, life:1.8});
+    playSound('shoot');
+  }
+  if(player.attackCooldown > 0) player.attackCooldown -= dt/1000;
+
+  // Update projectiles
+  for(let i=projectiles.length-1;i>=0;i--){
+    const pr = projectiles[i];
+    pr.x += pr.vx;
+    pr.life -= dt/1000;
+    if(pr.life<=0) projectiles.splice(i,1);
+  }
+
+  // Enemies: patrol and chase if player within 220
+  for(const en of enemies){
+    if(!en.isAlive) continue;
+    const dist = Math.abs((en.x+en.w/2) - (player.x+player.w/2));
+    if(dist < 220 && Math.abs(player.y - en.y) < 100){
+      // chase
+      en.vx += (player.x < en.x) ? -0.06 : 0.06;
+      en.vx = Math.max(Math.min(en.vx,2.5), -2.5);
+    } else {
+      // patrol
+      if(en.x < en.startX - en.range) en.vx = Math.abs(en.vx);
+      if(en.x > en.startX + en.range) en.vx = -Math.abs(en.vx);
+    }
+    en.x += en.vx;
+
+    // hit by projectile?
+    for(let i=projectiles.length-1;i>=0;i--){
+      const pr = projectiles[i];
+      if(new Rect(pr.x,pr.y,8,8).intersects(en.rect())){
+        en.health -= 1;
+        projectiles.splice(i,1);
+        playSound('hit');
+        if(en.health<=0){ en.isAlive=false; playSound('enemyDie'); Game.score += 10; }
+        break;
+      }
+    }
+
+    // collide with player
+    if(en.isAlive && en.rect().intersects(player.rect())){
+      // simple knockback & damage
+      if(player.attackCooldown <= 0.3){ /* if recently attacked, player avoids? */ }
+      player.health -= 1;
+      en.isAlive=false;
+      playSound('hit');
+      if(player.health<=0){ player.isAlive=false; }
+    }
+  }
+
+  // Coins collect
+  for(const c of coins){
+    if(!c.collected && new Rect(c.x,c.y,16,16).intersects(player.rect())){
+      c.collected = true;
+      Game.coins += 1;
+      Game.score += 5;
+      playSound('coin');
+    }
+  }
+
+  // Goal check
+  if(new Rect(goal.x,goal.y,goal.w,goal.h).intersects(player.rect())){
+    // Level complete
+    onLevelComplete();
+  }
+
+  // Time limit check
+  if(lvl.timeLimit && Game.timeSec > lvl.timeLimit){ // lose
+    player.health = 0; player.isAlive=false;
+  }
+
+  // Camera follow
+  cameraX = Math.max(0, player.x - W/4);
+
+  // Update HUD
+  updateHUD();
+}
+
+// projectiles list
+let projectiles = [];
+
+/* -------------------------
+   Render
+   ------------------------- */
+function render(){
+  // Clear & day/night cycle (color shifts slowly)
+  const t = Date.now()/1000;
+  const dayPhase = (Math.sin(t*0.05) + 1) / 2; // 0..1
+  const skyR = Math.floor(110 + 80*dayPhase);
+  const skyG = Math.floor(180 + 50*dayPhase);
+  const skyB = Math.floor(255 - 60*dayPhase);
+  ctx.fillStyle = `rgb(${skyR},${skyG},${skyB})`;
+  ctx.fillRect(0,0,W,H);
+
+  // Parallax background layers
+  drawParallax(cameraX);
+
+  ctx.save();
+  ctx.translate(-cameraX,0);
+
+  // platforms
+  for(const p of platforms){
+    ctx.fillStyle = '#5c4033';
+    ctx.fillRect(p.x,p.y,p.w,p.h);
+  }
+
+  // coins
+  for(const c of coins){
+    if(c.collected) continue;
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(c.x+8,c.y+8,8,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  // goal
+  ctx.fillStyle = '#2ecc71';
+  ctx.fillRect(goal.x,goal.y,goal.w,goal.h);
+
+  // enemies
+  for(const en of enemies){
+    if(!en.isAlive) continue;
+    ctx.fillStyle = '#d64545';
+    ctx.fillRect(en.x,en.y-en.h,en.w,en.h);
+  }
+
+  // projectiles
+  ctx.fillStyle = '#fff';
+  for(const pr of projectiles){ ctx.fillRect(pr.x,pr.y,8,6); }
+
+  // player
+  if(player.isAlive){
+    ctx.fillStyle = '#3366ff';
+    ctx.fillRect(player.x,player.y,player.w,player.h);
+    // simple sword when attacking
+    if(player.attackCooldown > 0.9){
+      ctx.fillStyle = '#fffc';
+      ctx.fillRect(player.x + (player.facing>0?player.w: -10), player.y+20, 10,4);
+    }
+  } else {
+    // death sprite
+    ctx.fillStyle = '#222';
+    ctx.fillRect(player.x,player.y,player.w,player.h);
+  }
+
+  ctx.restore();
+
+  // Optionally draw minimap (simple)
+  drawMiniMap();
+}
+
+function drawParallax(camX){
+  // three layers: far, mid, near
+  const farX = - (camX * 0.1 % 1024);
+  ctx.fillStyle = '#8ecae6';
+  ctx.fillRect(farX, 60, 2048, 120);
+  // mountains
+  ctx.fillStyle = '#6b5b95';
+  ctx.fillRect(farX+200,140,420,120);
+  // near clouds / trees
+  const nearX = - (camX * 0.4 % 1024);
+  ctx.fillStyle = '#2a9d8f';
+  for(let i=-1;i<6;i++){
+    ctx.fillRect(nearX + i*260, 220, 160, 60);
+  }
+}
+
+/* -------------------------
+   HUD & UI
+   ------------------------- */
+function updateHUD(){
+  // hearts
+  const heartsEl = $('#hearts');
+  heartsEl.textContent = '❤'.repeat(Math.max(0,player.health)) + '♡'.repeat(Math.max(0, player.maxHealth - player.health));
+  $('#score').textContent = Game.score;
+  $('#timer').textContent = Math.floor(Game.timeSec);
+}
+
+/* -------------------------
+   Game events
+   ------------------------- */
+function onLevelComplete(){
+  Game.running = false;
+  showSubMenu(`<div class="card"><h2>Level Complete!</h2><p>Score: ${Game.score} | Coins: ${Game.coins}</p>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:8px">
+      <button class="btn" id="nextLvlBtn">Next Level</button>
+      <button class="btn" id="menuFromLvlBtn">Main Menu</button>
+    </div></div>`);
+  $('#nextLvlBtn').addEventListener('click', ()=>{
+    closeSubMenu();
+    if(Game.levelIndex < LEVELS.length-1) loadLevel(Game.levelIndex+1);
+    else { // finished all => back to menu
+      Game.running=false; showMainMenu();
+    }
+  });
+  $('#menuFromLvlBtn').addEventListener('click', ()=>{ closeSubMenu(); showMainMenu(); });
+}
+
+function onGameOver(){
+  Game.running = false;
+  // ask name and save to leaderboard
+  const name = prompt(`Game Over! Your score: ${Game.score}\nEnter name for leaderboard:`, 'Player');
+  if(name){
+    addScoreToLeaderboard(name, Game.score);
+  }
+  showMainMenu();
+}
+
+/* -------------------------
+   Leaderboard (localStorage)
+   ------------------------- */
+function loadLeaderboard(){
+  const raw = localStorage.getItem(STORAGE_SCORES);
+  return raw ? JSON.parse(raw) : [];
+}
+function saveLeaderboard(list){
+  localStorage.setItem(STORAGE_SCORES, JSON.stringify(list));
+}
+function addScoreToLeaderboard(name, score){
+  const list = loadLeaderboard();
+  list.push({name,score,date:Date.now()});
+  list.sort((a,b)=>b.score - a.score);
+  saveLeaderboard(list.slice(0,50));
+}
+
+/* -------------------------
+   Menus & controls
+   ------------------------- */
+function showMainMenu(){ $('#mainMenu').style.display='flex'; $('#subMenu').style.display='none'; }
+function hideMainMenu(){ $('#mainMenu').style.display='none'; }
+function showSubMenu(html){
+  $('#subMenu').innerHTML = html;
+  $('#subMenu').style.display = 'flex';
+}
+function closeSubMenu(){ $('#subMenu').style.display='none'; $('#subMenu').innerHTML=''; }
+
+/* UI Buttons */
+$('#playBtn').addEventListener('click', ()=>{
+  hideMainMenu();
+  loadLevel(0);
+});
+$('#openMenuBtn').addEventListener('click', showMainMenu);
+$('#pauseBtn').addEventListener('click', ()=>{
+  Game.paused = !Game.paused;
+  $('#pauseBtn').textContent = Game.paused ? 'Resume' : 'Pause';
+});
+$('#shopBtn').addEventListener('click', ()=>{
+  hideMainMenu();
+  showShop();
+});
+$('#leaderBtn').addEventListener('click', ()=>{ hideMainMenu(); showLeaderboard(); });
+$('#settingsBtn').addEventListener('click', ()=>{ hideMainMenu(); showSettings(); });
+$('#exportScoresBtn').addEventListener('click', ()=>{
+  const blob = new Blob([localStorage.getItem(STORAGE_SCORES)||'[]'], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'leaderboard.json'; a.click(); URL.revokeObjectURL(url);
+});
+
+/* Shop */
+function showShop(){
+  const html = `<div class="card">
+    <h2>Shop</h2>
+    <p>Coins: ${Game.coins}</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+      <button class="btn" id="buySpeed">Buy +Speed (5 coins)</button>
+      <button class="btn" id="buyHealth">Buy +MaxHealth (8 coins)</button>
+      <button class="btn" id="shopBack">Back</button>
+    </div></div>`;
+  showSubMenu(html);
+  $('#buySpeed').addEventListener('click', ()=>{
+    if(Game.coins>=5){ Game.coins-=5; player.speed += 1; alert('Bought speed!'); Game.save(); closeSubMenu(); showShop(); }
+    else alert('Not enough coins');
+  });
+  $('#buyHealth').addEventListener('click', ()=>{
+    if(Game.coins>=8){ Game.coins-=8; player.maxHealth +=1; player.health = player.maxHealth; alert('Max health increased!'); Game.save(); closeSubMenu(); showShop(); }
+    else alert('Not enough coins');
+  });
+  $('#shopBack').addEventListener('click', ()=>{ closeSubMenu(); showMainMenu(); });
+}
+
+/* Leaderboard UI */
+function showLeaderboard(){
+  const list = loadLeaderboard();
+  let rows = list.slice(0,10).map((r,i)=> `<div style="display:flex;justify-content:space-between"><div>${i+1}. ${escapeHtml(r.name)}</div><div>${r.score}</div></div>`).join('');
+  const html = `<div class="card"><h2>Leaderboard</h2><div style="text-align:left;margin-top:8px">${rows||'<i>No scores yet</i>'}</div><div style="margin-top:12px"><button class="btn" id="lbBack">Back</button></div></div>`;
+  showSubMenu(html);
+  $('#lbBack').addEventListener('click', ()=>{ closeSubMenu(); showMainMenu(); });
+}
+
+/* Settings UI */
+function showSettings(){
+  const html = `<div class="card"><h2>Settings</h2>
+    <div style="text-align:left">
+      <label class="mini">Sound: <input type="checkbox" id="soundToggle" ${Game.settings.sound ? 'checked':''}></label><br/>
+      <label class="mini">Graphics:
+        <select id="graphicsSel"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select>
+      </label>
+      <div style="margin-top:8px" class="mini">Key remap (click button then press a key)</div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="btn" id="remapLeft">Left: <span id="kLeft">${Game.keys.left}</span></button>
+        <button class="btn" id="remapRight">Right: <span id="kRight">${Game.keys.right}</span></button>
+        <button class="btn" id="remapJump">Jump: <span id="kJump">${Game.keys.jump}</span></button>
+        <button class="btn" id="remapAtk">Atk: <span id="kAtk">${Game.keys.attack}</span></button>
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:center">
+      <button class="btn" id="settingsBack">Back</button>
+    </div>
+  </div>`;
+  showSubMenu(html);
+  $('#graphicsSel').value = Game.settings.graphics;
+  $('#soundToggle').addEventListener('change', e=>{ Game.settings.sound = e.target.checked; Game.save(); });
+  $('#graphicsSel').addEventListener('change', e=>{ Game.settings.graphics = e.target.value; Game.save(); });
+
+  // remapping logic
+  function remap(keyName, elSpan){
+    showSubMenu(`<div class="card"><h3>Press a key to map for ${keyName}</h3><button class="btn" id="cancelRemap">Cancel</button></div>`);
+    function handler(e){ Game.keys[keyName] = e.code; Game.save(); closeSubMenu(); showSettings(); window.removeEventListener('keydown', handler); }
+    window.addEventListener('keydown', handler);
+    $('#cancelRemap').addEventListener('click', ()=>{ closeSubMenu(); showSettings(); window.removeEventListener('keydown', handler); });
+  }
+  $('#remapLeft').addEventListener('click', ()=> remap('left','kLeft'));
+  $('#remapRight').addEventListener('click', ()=> remap('right','kRight'));
+  $('#remapJump').addEventListener('click', ()=> remap('jump','kJump'));
+  $('#remapAtk').addEventListener('click', ()=> remap('attack','kAtk'));
+  $('#settingsBack').addEventListener('click', ()=>{ closeSubMenu(); showMainMenu(); });
+}
+
+/* -------------------------
+   Sound (simple)
+   ------------------------- */
+const SFX = {
+  jump:new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA='), // tiny silent wav placeholder
+  coin:null, shoot:null, hit:null, enemyDie:null
+};
+function playSound(k){
+  if(!Game.settings.sound) return;
+  const s = SFX[k];
+  if(s) { try{s.currentTime=0; s.play();}catch(e){} }
+}
+
+/* -------------------------
+   Mini-map (basic)
+   ------------------------- */
+function drawMiniMap(){
+  // small rectangle top-right
+  const w = 160, h=60;
+  const x = W - w - 20, y = 20;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(x,y,w,h);
+  // draw simplified platforms & player pos
+  const levelWidth = 2048;
+  const scale = w/levelWidth;
+  ctx.fillStyle = '#fff';
+  for(const p of platforms){
+    ctx.fillRect(x + p.x*scale, y + (h-8), p.w*scale, 6);
+  }
+  ctx.fillStyle = '#ffd700';
+  for(const c of coins){ if(c.collected) continue; ctx.fillRect(x + c.x*scale, y + h - 20, 4,4); }
+  ctx.fillStyle = '#36b37e';
+  ctx.fillRect(x + player.x*scale, y + 6, 6,6);
+  ctx.restore();
+}
+
+/* -------------------------
+   Utilities
+   ------------------------- */
+function escapeHtml(s){ return String(s||'').replace(/[&<>"]/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* -------------------------
+   Game tick
+   ------------------------- */
+function gameLoop(ts){
+  if(!lastTime) lastTime = ts;
+  const dt = Math.min(40, ts - lastTime);
+  lastTime = ts;
+
+  update(dt);
+  render();
+
+  // Game over check
+  if(player.health <= 0 && Game.running){
+    Game.running=false;
+    setTimeout(()=>onGameOver(), 200);
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+/* -------------------------
+   Init
+   ------------------------- */
+function init(){
+  Game.load();
+  setupTouch();
+  // show main menu
+  showMainMenu();
+  // attach more UI buttons if needed
+  if(isTouch) { /* show touch controls */ }
+
+  // adjust canvas size on resize
+  function resize(){
+    // keep internal resolution constant, canvas scales by CSS
+    W = canvas.width = 1024;
+    H = canvas.height = 640;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // start loop
+  requestAnimationFrame(gameLoop);
+}
+
+// Start quickly
+init();
+
+/* -------------------------
+   Additional small features
+   ------------------------- */
+// Export leaderboard helper is attached in UI earlier
+
+// Make sure controls from keyboard affect player (apply in update)
+// (project uses Game.keys already for mapping)
+
+// Quick debug: start level when pressing P
+window.addEventListener('keydown', e=> {
+  if(e.key==='p'){ hideMainMenu(); loadLevel(0); }
+});
+
+// If Game is not running and user closes subMenu main menu, ensure menu visible
+$('#subMenu').addEventListener('click', (e)=>{ if(e.target.id==='subMenu') closeSubMenu(); });
+
+</script>
+</body>
+</html>

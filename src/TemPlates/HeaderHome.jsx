@@ -72,8 +72,8 @@ const HeaderHome = () => {
               <NavLink className="dropdown-item" to="/react-router-dom/demo-use-navigate">
                 Demo use navigate
               </NavLink>
-              <NavLink className="dropdown-item" to="#">
-                Action 2
+              <NavLink className="dropdown-item" to="/react-router-dom/use-search-param">
+                Demo use search param
               </NavLink>
             </div>
           </li>
