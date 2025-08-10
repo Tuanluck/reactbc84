@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
 
-const ProductsPage = (props) => {
-  const [arrProduct, setArrProduct] = useState([]);
+import axios from 'axios'; 
+import React, { useState, useEffect } from 'react';
+
+
+const ProductsPage = () => {
+    // eslint-disable-next-line no-undef
+    const [arrProduct, setArrProduct] = useState([]);
   //   const getAllProductApi = async () => {
   //     try {
   //       let res = await fetch(`https://apistore.cybersoft.edu.vn/api/Product`);
@@ -25,6 +28,7 @@ const ProductsPage = (props) => {
       console.log(err);
     }
   };
+  // eslint-disable-next-line no-undef
   useEffect(() => {
     //function hook useEffect
     //Sau khi html được khởi tạo lần đầu tiên và sau mỗi lần setState (bất kì state nào)
@@ -67,6 +71,6 @@ const ProductsPage = (props) => {
       </div>
     </div>
   );
-};
+}
 
-export default ProductsPage;
+export default ProductsPage

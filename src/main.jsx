@@ -1,54 +1,43 @@
-
-import { createRoot } from 'react-dom/client'
-import BT1_HomeComponents from './components/BT1_HomeComponents'
-import './css/index.css'
-import DataBinding from './databuilding/DataBiding'
-import HandleEvent from './HandleEvent/HandleEvent'
-import RenderCondition from './RenderCondition/RenderCondition'
-import RenderState from './RenderState/RenderState'
-import DemoStateChangeNumber from './RenderState/DemoStateChangeNumber'
-import DemoChangeCar from './RenderState/DemoChangeCar'
-import DemoTinke from './RenderState/DemoTinke'
-import StyleComponent from './StyleComponents/StyleComponent'
-import DemoProps from './Props/DemoProps'
-import BT_productlish from './Props/BT-props/BT_productlish'
-import BT_StateProps from './BT_StateProps/BT_StateProps'
-import BT_MonAn from './Props/BT_MonAn/BT_MonAn'
-import ProductsPage from './API/ProductsPage'
-import TodoListApi from './API/TodoListApi'
-import DemoFormLogin from './Form/DemoFormLogin'
-import DemoFormik from './Form/DemoFormik'
-
-
+import { createRoot } from "react-dom/client";
+import "./css/index.css";
+import { BrowserRouter, Outlet, Route, Routes } from "react-router-dom";
+import ToDoListApi from "./API/TodoListApi";
+import HomeIndex from "./Pages/HomeIndex";
+import Login from "./Pages/Login";
+import ProductsPage from "./API/ProductsPage";
+import HeaderHome from "./TemPlates/HeaderHome";
+import FooterHome from "./TemPlates/FooterHome";
+import Register from "./Pages/Register";
+import HomeTemplate from "./TemPlates/HomeTemplate";
+import DemoUseNavigate from "./Pages/ReactRouterDom/DemoUseNavigate";
+import ForGotPass from "./Pages/ReactRouterDom/ForGotPass";
 /*
   Phân biệt state và props:
   state: giá trị thay đổi dùng để binding lên giao diện, state có thể gán lại giá trị ( state,setState)
   props: giá trị có thể thay đổi dùng để binding lên giao diện, props không thể gán lại giá trị (readonly)
 */
 
-
-createRoot(document.getElementById('root')).render(
-  <div className='w-full'>
-    {/* <BT1_HomeComponents></BT1_HomeComponents> */}
-    {/* <DataBinding/> */}
-    {/* <HandleEvent/> */}
-    {/* <RenderCondition/> */}
-    {/* <RenderState/> */}
-    {/* <DemoStateChangeNumber/> */}
-    {/* <DemoChangeCar/> */}
-    {/* <DemoTinke/> */}
-    {/* <StyleComponent/> */}
-    {/* <DemoProps/> */}
-    {/* <BT_productlish/> */}
-    {/* <BT_StateProps/> */}
-    {/* <BT_MonAn/> */}
-    {/* <ProductsPage/> */}
-    {/* <TodoListApi/> */}
-    {/* <DemoFormLogin/> */}
-    <DemoFormik/>
-
-  </div>
-  
-)
-
-
+createRoot(document.getElementById("root")).render(
+  <BrowserRouter>
+    <Routes>
+      <Route path="" element={<HomeTemplate/>}>
+        <Route index element={<HomeIndex />}></Route>
+        <Route path="/login" element={<Login />}></Route>
+        <Route path="/register" element={<Register />}></Route>
+        
+      </Route>
+      <Route path="api" element={<div>
+        <HeaderHome></HeaderHome>
+        <Outlet/>
+        <FooterHome/>
+      </div>}>
+        <Route path="todoList" element={<ToDoListApi />}></Route>
+        <Route path="productpage" element={<ProductsPage />}></Route>
+      </Route>
+      <Route path="react-router-dom">
+        <Route path="demo-use-navigate" element={<DemoUseNavigate/>}></Route>
+        <Route path="forgot-password" element={<ForGotPass/>}></Route>
+      </Route>
+    </Routes>
+  </BrowserRouter>
+);
