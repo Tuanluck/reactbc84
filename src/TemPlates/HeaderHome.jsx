@@ -1,8 +1,19 @@
 import React from "react";
 import Register from "./../Pages/Register";
-import { NavLink } from "react-router-dom";
+import { NavLink,useNavigate } from "react-router-dom";
+import { SearchOutlined, ShoppingCartOutlined } from "@ant-design/icons";
+import { Badge, Button } from "antd";
+import { useSelector } from "react-redux";
 
 const HeaderHome = () => {
+  const navigate = useNavigate();
+  const { carts } = useSelector((state) => state.product);
+  console.log("🔥 ~ HeaderHome ~ data:", carts);
+
+  const handleRedirectShoppingCart = ()=>{
+    navigate('/redux-shopping-cart')
+  }
+
   return (
     <nav className="navbar navbar-expand-sm navbar-dark bg-dark">
       <NavLink className="navbar-brand" to="/">
@@ -24,7 +35,9 @@ const HeaderHome = () => {
               className={({ isActive }) =>
                 isActive ? "bg-white text-dark nav-link" : "nav-link"
               }
-              style={({isActive})=> isActive ? {border:'2px solid orange'}:{}}
+              style={({ isActive }) =>
+                isActive ? { border: "2px solid orange" } : {}
+              }
               to="/"
               aria-current="page"
             >
@@ -57,6 +70,19 @@ const HeaderHome = () => {
               Register
             </NavLink>
           </li>
+          <li>
+            <NavLink
+              className={({ isActive }) =>
+                isActive ? "bg-white text-dark nav-link" : "nav-link"
+              }
+              style={({ isActive }) =>
+                isActive ? { border: "2px solid orange" } : {}
+              }
+              to="/antd"
+            >
+              Antd Design
+            </NavLink>
+          </li>
           <li className="nav-item dropdown">
             <a
               className="nav-link dropdown-toggle"
@@ -69,26 +95,64 @@ const HeaderHome = () => {
               react-router-dom
             </a>
             <div className="dropdown-menu" aria-labelledby="dropdownId">
-              <NavLink className="dropdown-item" to="/react-router-dom/demo-use-navigate">
+              <NavLink
+                className="dropdown-item"
+                to="/react-router-dom/demo-use-navigate"
+              >
                 Demo use navigate
               </NavLink>
-              <NavLink className="dropdown-item" to="/react-router-dom/use-search-param">
+              <NavLink
+                className="dropdown-item"
+                to="/react-router-dom/use-search-param"
+              >
                 Demo use search param
               </NavLink>
             </div>
           </li>
+          <li className="nav-item dropdown">
+            <a
+              className="nav-link dropdown-toggle"
+              href="#"
+              id="dropdownId"
+              data-bs-toggle="dropdown"
+              aria-haspopup="true"
+              aria-expanded="false"
+            >
+              redux
+            </a>
+            <div className="dropdown-menu" aria-labelledby="dropdownId">
+              <NavLink className="dropdown-item" to="/redux-change-number">
+                demo change number
+              </NavLink>
+              <NavLink className="dropdown-item" to="/redux-product">
+                demo product
+              </NavLink>
+              <NavLink className="dropdown-item" to="/redux-shopping-cart">
+                demo shoping cart
+              </NavLink>
+            </div>
+          </li>
         </ul>
-        <form className="d-flex my-2 my-lg-0">
+        <form className="d-flex my-2 my-lg-0 gap-3">
+          <button className="btn btn-outline-success my-2 my-sm-0 d-flex align-items-center" type="button" >
+            <Badge count={carts.length} showZero onClick={(e)=>{
+              handleRedirectShoppingCart(e);
+            }}>
+              <ShoppingCartOutlined
+                style={{ fontSize: "20px", color: "white" }}
+              />
+            </Badge>
+          </button>
           <input
             className="form-control me-sm-2"
             type="text"
             placeholder="Search"
           />
           <button
-            className="btn btn-outline-success my-2 my-sm-0"
+            className="btn btn-outline-success my-2 my-sm-0 text-white"
             type="submit"
           >
-            Search
+            <SearchOutlined />
           </button>
         </form>
       </div>

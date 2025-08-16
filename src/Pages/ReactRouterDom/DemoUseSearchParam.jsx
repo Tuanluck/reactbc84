@@ -53,7 +53,7 @@ const DemoUseSearchParam = () => {
           </div>
           <div className="col-md-2 d-grid">
             <button type="submit" className="btn btn-primary">
-              Tìm
+              Tìm kiếm
             </button>
           </div>
         </div>
